@@ -23,6 +23,17 @@ func TestValidateReceiversNotDisposable(t *testing.T) {
 	assert.Contains(t, err.Error(), "disposable email address is not allowed")
 }
 
+func TestValidateReceiversNotDisposableRejectsCustomBlacklist(t *testing.T) {
+	require.True(t, DisposableEmailBlocklistReady())
+
+	customEmailDomainBlacklist = parseCustomEmailDomainBlacklist("custom-blocked.example")
+	defer func() { customEmailDomainBlacklist = nil }()
+
+	err := validateReceiversNotDisposable([]string{"user@custom-blocked.example"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "email domain is not allowed")
+}
+
 func TestSendEmailRejectsDisposableAddress(t *testing.T) {
 	withSMTPSettings(t)
 
