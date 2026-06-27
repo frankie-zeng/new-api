@@ -97,6 +97,9 @@ func SendEmail(subject string, receiver string, content string) error {
 	auth := getSMTPAuth()
 	addr := fmt.Sprintf("%s:%d", SMTPServer, SMTPPort)
 	to := strings.Split(receiver, ";")
+	if err := validateReceiversNotDisposable(to); err != nil {
+		return err
+	}
 	var err error
 	client, err := newSMTPClient(addr)
 	if err != nil {
