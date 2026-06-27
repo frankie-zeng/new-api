@@ -738,6 +738,11 @@ func (user *User) finishInsert(inviterId int) {
 			_ = inviteUser(inviterId)
 		}
 	}
+	triggerNewUserCreated(NewUserCreatedEvent{
+		UserId:   user.Id,
+		Username: user.Username,
+		Email:    user.Email,
+	})
 }
 
 func (user *User) FinishInsert(inviterId int) {
@@ -794,6 +799,11 @@ func (user *User) FinalizeOAuthUserCreation(inviterId int) {
 			_ = inviteUser(inviterId)
 		}
 	}
+	triggerNewUserCreated(NewUserCreatedEvent{
+		UserId:   user.Id,
+		Username: user.Username,
+		Email:    user.Email,
+	})
 }
 
 func (user *User) Update(updatePassword bool) error {
