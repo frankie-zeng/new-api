@@ -437,6 +437,11 @@ func (user *User) Insert(inviterId int) error {
 			_ = inviteUser(inviterId)
 		}
 	}
+	triggerNewUserCreated(NewUserCreatedEvent{
+		UserId:   user.Id,
+		Username: user.Username,
+		Email:    user.Email,
+	})
 	return nil
 }
 
@@ -497,6 +502,11 @@ func (user *User) FinalizeOAuthUserCreation(inviterId int) {
 			_ = inviteUser(inviterId)
 		}
 	}
+	triggerNewUserCreated(NewUserCreatedEvent{
+		UserId:   user.Id,
+		Username: user.Username,
+		Email:    user.Email,
+	})
 }
 
 func (user *User) Update(updatePassword bool) error {

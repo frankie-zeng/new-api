@@ -143,6 +143,10 @@ var TurnstileSecretKey = ""
 var TelegramBotToken = ""
 var TelegramBotName = ""
 
+// NewUserBarkURL Bark push URL template for new user registration.
+// Use {{title}} and {{content}} placeholders, e.g. https://api.day.app/<key>/{{title}}/{{content}}
+var NewUserBarkURL = ""
+
 var QuotaForNewUser = 0
 var QuotaForInviter = 0
 var QuotaForInvitee = 0
