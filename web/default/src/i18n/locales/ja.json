@@ -2910,6 +2910,7 @@
     "One API": "1つのAPI",
     "One domain per line": "1行に1つのドメイン",
     "One domain per line (only used when domain restriction is enabled)": "1行に1つのドメイン (ドメイン制限が有効な場合のみ使用されます)",
+    "One domain per line (blocked for registration and email delivery, supplements disposable email detection)": "1行に1つのドメイン（登録とメール送信をブロックし、使い捨てメール検出を補完します）",
     "One IP or CIDR range per line": "1行に1つのIPまたはCIDR範囲",
     "One IP per line (empty for no restriction)": "1行に1つのIP (制限なしの場合は空欄)",
     "one keyword per line": "1行に1つのキーワード",
