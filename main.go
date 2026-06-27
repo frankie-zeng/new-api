@@ -331,5 +331,11 @@ func InitResources() error {
 		// Don't return error, custom OAuth is not critical
 	}
 
+	if common.DisposableEmailBlocklistReady() {
+		common.SysLog(fmt.Sprintf("disposable email blocklist loaded: %d domains", common.DisposableEmailBlocklistCount()))
+	} else {
+		common.SysError("disposable email blocklist failed to load; outbound SMTP is disabled")
+	}
+
 	return nil
 }
