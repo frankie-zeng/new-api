@@ -45,6 +45,7 @@ import { OAuthProviders } from '@/features/auth/components/oauth-providers'
 import { loginFormSchema } from '@/features/auth/constants'
 import { useAuthRedirect } from '@/features/auth/hooks/use-auth-redirect'
 import { useTurnstile } from '@/features/auth/hooks/use-turnstile'
+import { shouldSkipLocalAuthForm } from '@/features/auth/lib/oauth'
 import { beginPasskeyLogin, finishPasskeyLogin } from '@/features/auth/passkey'
 import {
   requestPasskeyAssertion,
@@ -63,6 +64,7 @@ import { cn } from '@/lib/utils'
 export function UserAuthForm({
   className,
   redirectTo,
+  forceLocalAuth = false,
   ...props
 }: AuthFormProps) {
   const { t } = useTranslation()
@@ -90,7 +92,7 @@ export function UserAuthForm({
   const passwordLoginEnabled =
     (status?.password_login_enabled ??
       status?.data?.password_login_enabled ??
-      true) !== false
+      true) !== false && !shouldSkipLocalAuthForm(status, { forceLocalAuth })
   const passwordLoginEncryptionEnabled =
     (status?.password_login_encryption_enabled ??
       status?.data?.password_login_encryption_enabled ??
@@ -338,6 +340,7 @@ export function UserAuthForm({
         disabled={isLoading || (requiresLegalConsent && !agreedToLegal)}
         onWeChatLogin={hasWeChatLogin ? handleOpenWeChatDialog : undefined}
         isWeChatLoading={isWeChatSubmitting}
+        showDivider={passwordLoginEnabled}
       />
     </>
   )

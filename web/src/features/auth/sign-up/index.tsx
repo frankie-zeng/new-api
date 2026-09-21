@@ -16,18 +16,38 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { Link } from '@tanstack/react-router'
+import { Link, useSearch } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
 
 import { useStatus } from '@/hooks/use-status'
 
 import { AuthLayout } from '../auth-layout'
+import { OAuthRedirectPending } from '../components/oauth-redirect-pending'
 import { TermsFooter } from '../components/terms-footer'
+import { useAutoOAuthRedirect } from '../hooks/use-auto-oauth-redirect'
+import { isForcedLocalAuth } from '../lib/oauth'
 import { SignUpForm } from './components/sign-up-form'
 
 export function SignUp() {
   const { t } = useTranslation()
-  const { status } = useStatus()
+  const search = useSearch({ from: '/(auth)/sign-up' })
+  const { status, loading } = useStatus()
+  const forceLocalAuth = isForcedLocalAuth(search.local)
+  const oauthRegisterEnabled =
+    status?.oauth_register_enabled ??
+    status?.data?.oauth_register_enabled ??
+    true
+  const { isRedirecting, providerName } = useAutoOAuthRedirect(status, {
+    enabled: !forceLocalAuth && oauthRegisterEnabled,
+  })
+
+  if (!forceLocalAuth && (isRedirecting || (loading && !status))) {
+    return (
+      <AuthLayout>
+        <OAuthRedirectPending providerName={providerName} />
+      </AuthLayout>
+    )
+  }
 
   return (
     <AuthLayout>
@@ -48,7 +68,7 @@ export function SignUp() {
           </p>
         </div>
 
-        <SignUpForm />
+        <SignUpForm forceLocalAuth={forceLocalAuth} />
 
         <TermsFooter
           variant='sign-up'

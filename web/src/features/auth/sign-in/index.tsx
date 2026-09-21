@@ -22,13 +22,29 @@ import { useTranslation } from 'react-i18next'
 import { useStatus } from '@/hooks/use-status'
 
 import { AuthLayout } from '../auth-layout'
+import { OAuthRedirectPending } from '../components/oauth-redirect-pending'
 import { TermsFooter } from '../components/terms-footer'
+import { useAutoOAuthRedirect } from '../hooks/use-auto-oauth-redirect'
+import { isForcedLocalAuth } from '../lib/oauth'
 import { UserAuthForm } from './components/user-auth-form'
 
 export function SignIn() {
   const { t } = useTranslation()
-  const { redirect } = useSearch({ from: '/(auth)/sign-in' })
-  const { status } = useStatus()
+  const search = useSearch({ from: '/(auth)/sign-in' })
+  const { status, loading } = useStatus()
+  const forceLocalAuth = isForcedLocalAuth(search.local)
+  const { isRedirecting, providerName } = useAutoOAuthRedirect(status, {
+    enabled: !forceLocalAuth,
+    redirectTo: search.redirect,
+  })
+
+  if (!forceLocalAuth && (isRedirecting || (loading && !status))) {
+    return (
+      <AuthLayout>
+        <OAuthRedirectPending providerName={providerName} />
+      </AuthLayout>
+    )
+  }
 
   return (
     <AuthLayout>
@@ -52,7 +68,10 @@ export function SignIn() {
             )}
         </div>
 
-        <UserAuthForm redirectTo={redirect} />
+        <UserAuthForm
+          redirectTo={search.redirect}
+          forceLocalAuth={forceLocalAuth}
+        />
 
         <TermsFooter
           variant='sign-in'
