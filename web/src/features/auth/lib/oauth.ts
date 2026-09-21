@@ -16,7 +16,11 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import type { SystemStatus, OAuthProvider } from '../types'
+import type {
+  SystemStatus,
+  OAuthProvider,
+  CustomOAuthProviderInfo,
+} from '../types'
 
 export {
   buildGitHubOAuthUrl,
@@ -98,6 +102,79 @@ export function hasOAuthProviders(status: SystemStatus | null): boolean {
     status.oidc_enabled ||
     status.linuxdo_oauth ||
     status.telegram_oauth ||
-    status.wechat_login
+    status.wechat_login ||
+    (status.custom_oauth_providers?.length ?? 0) > 0
   )
+}
+
+export type RedirectOAuthProvider =
+  | { kind: 'github'; name: string }
+  | { kind: 'discord'; name: string }
+  | { kind: 'oidc'; name: string }
+  | { kind: 'linuxdo'; name: string }
+  | { kind: 'custom'; name: string; provider: CustomOAuthProviderInfo }
+
+/**
+ * OAuth providers that can send the browser to an upstream authorize URL.
+ * Telegram and WeChat need in-page dialogs, so they are excluded.
+ */
+export function getRedirectOAuthProviders(
+  status: SystemStatus | null
+): RedirectOAuthProvider[] {
+  if (!status) return []
+
+  const providers: RedirectOAuthProvider[] = []
+
+  if (status.github_oauth && status.github_client_id) {
+    providers.push({ kind: 'github', name: 'GitHub' })
+  }
+
+  if (status.discord_oauth && status.discord_client_id) {
+    providers.push({ kind: 'discord', name: 'Discord' })
+  }
+
+  if (
+    status.oidc_enabled &&
+    status.oidc_client_id &&
+    status.oidc_authorization_endpoint
+  ) {
+    providers.push({
+      kind: 'oidc',
+      name: status.oidc_display_name?.trim() || 'OIDC',
+    })
+  }
+
+  if (status.linuxdo_oauth && status.linuxdo_client_id) {
+    providers.push({ kind: 'linuxdo', name: 'LinuxDO' })
+  }
+
+  for (const provider of status.custom_oauth_providers ?? []) {
+    if (!provider.authorization_endpoint || !provider.client_id) continue
+    providers.push({
+      kind: 'custom',
+      name: provider.name,
+      provider,
+    })
+  }
+
+  return providers
+}
+
+export function getSoleRedirectOAuthProvider(
+  status: SystemStatus | null
+): RedirectOAuthProvider | null {
+  const providers = getRedirectOAuthProviders(status)
+  return providers.length === 1 ? providers[0] : null
+}
+
+export function shouldSkipLocalAuthForm(
+  status: SystemStatus | null,
+  options?: { forceLocalAuth?: boolean }
+): boolean {
+  if (options?.forceLocalAuth) return false
+  return getRedirectOAuthProviders(status).length > 0
+}
+
+export function isForcedLocalAuth(value: unknown): boolean {
+  return value === true || value === 'true' || value === '1'
 }

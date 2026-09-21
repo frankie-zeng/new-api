@@ -16,25 +16,27 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { createFileRoute, redirect } from '@tanstack/react-router'
-import { z } from 'zod'
+import { Loader2 } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 
-import { SignUp } from '@/features/auth/sign-up'
-import { useAuthStore } from '@/stores/auth-store'
+type OAuthRedirectPendingProps = {
+  providerName?: string | null
+}
 
-const searchSchema = z.object({
-  local: z.union([z.boolean(), z.string()]).optional(),
-})
+export function OAuthRedirectPending(props: OAuthRedirectPendingProps) {
+  const { t } = useTranslation()
+  const headline = props.providerName
+    ? t('Signing you in with {{provider}}', { provider: props.providerName })
+    : t('Loading...')
 
-export const Route = createFileRoute('/(auth)/sign-up')({
-  component: SignUp,
-  validateSearch: searchSchema,
-  beforeLoad: async () => {
-    const { auth } = useAuthStore.getState()
-
-    // 如果已经有用户信息，说明已登录，注册页对其无意义，跳转到 dashboard
-    if (auth.user) {
-      throw redirect({ to: '/dashboard' })
-    }
-  },
-})
+  return (
+    <div
+      role='status'
+      aria-live='polite'
+      className='flex flex-col items-center space-y-4 text-center'
+    >
+      <Loader2 className='text-muted-foreground h-8 w-8 animate-spin' />
+      <h2 className='text-2xl font-semibold tracking-tight'>{headline}</h2>
+    </div>
+  )
+}

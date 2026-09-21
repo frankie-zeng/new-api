@@ -83,6 +83,9 @@ export {
   buildLinuxDOOAuthUrl,
   getAvailableOAuthProviders,
   hasOAuthProviders,
+  getRedirectOAuthProviders,
+  getSoleRedirectOAuthProvider,
+  shouldSkipLocalAuthForm,
 } from './lib/oauth'
 
 export { getAffiliateCode, saveAffiliateCode } from './lib/storage'
@@ -101,6 +104,7 @@ export {
 
 export { useTurnstile } from './hooks/use-turnstile'
 export { useOAuthLogin } from './hooks/use-oauth-login'
+export { useAutoOAuthRedirect } from './hooks/use-auto-oauth-redirect'
 export { useAuthRedirect } from './hooks/use-auth-redirect'
 export { useEmailVerification } from './hooks/use-email-verification'
 
