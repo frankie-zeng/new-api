@@ -16,19 +16,19 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { toast } from 'sonner'
 
-import { clearAuthentication } from '@/lib/api'
+import { handleServerError } from '@/lib/handle-server-error'
 import {
   buildDiscordOAuthUrl,
   buildGitHubOAuthUrl,
   buildLinuxDOOAuthUrl,
   buildOIDCOAuthUrl,
 } from '@/lib/oauth'
+import { AuthOperationError } from '@/lib/secure-verification'
 
-import { createOAuthFlow, logout } from '../api'
+import { createOAuthFlow, logoutBestEffort } from '../api'
 import {
   getSoleRedirectOAuthProvider,
   type RedirectOAuthProvider,
@@ -44,23 +44,23 @@ type UseAutoOAuthRedirectOptions = {
 async function startRedirectOAuthLogin(
   status: SystemStatus,
   provider: RedirectOAuthProvider,
-  redirectTo?: string
+  redirectTo: string | undefined,
+  isCancelled: () => boolean
 ) {
-  const response = await logout()
-  if (!response.success) {
-    throw new Error(response.message || 'Failed to sign out session')
-  }
-  clearAuthentication()
+  await logoutBestEffort()
+  if (isCancelled()) return
 
   const providerKey =
     provider.kind === 'custom' ? provider.provider.slug : provider.kind
   const state = await createOAuthFlow(providerKey, 'login')
+  if (isCancelled()) return
   rememberOAuthLoginRedirect(state, redirectTo)
   const url = buildAutoOAuthUrl(provider, status, state)
   if (!url) {
     throw new Error('OAuth provider is not ready')
   }
-  window.location.assign(url)
+  if (isCancelled()) return
+  window.open(url, '_self')
 }
 
 function buildAutoOAuthUrl(
@@ -127,19 +127,41 @@ export function useAutoOAuthRedirect(
     return getSoleRedirectOAuthProvider(status)
   }, [enabled, status])
 
+  let providerKey = ''
+  if (provider?.kind === 'custom') {
+    providerKey = provider.provider.slug
+  } else if (provider) {
+    providerKey = provider.kind
+  }
+
+  const latest = useRef({ status, provider, redirectTo, t })
+  latest.current = { status, provider, redirectTo, t }
+
   const [failed, setFailed] = useState(false)
 
   useEffect(() => {
-    if (!provider || !status) {
+    const current = latest.current
+    if (!current.provider || !current.status) {
       setFailed(false)
       return
     }
 
     let cancelled = false
-    void startRedirectOAuthLogin(status, provider, redirectTo).catch(() => {
+    const currentProvider = current.provider
+    void startRedirectOAuthLogin(
+      current.status,
+      currentProvider,
+      current.redirectTo,
+      () => cancelled
+    ).catch((error: unknown) => {
       if (cancelled) return
-      toast.error(
-        t('Failed to start {{provider}} login', { provider: provider.name })
+      handleServerError(
+        AuthOperationError.from(
+          error,
+          current.t('Failed to start {{provider}} login', {
+            provider: currentProvider.name,
+          })
+        )
       )
       setFailed(true)
     })
@@ -147,7 +169,7 @@ export function useAutoOAuthRedirect(
     return () => {
       cancelled = true
     }
-  }, [provider, status, redirectTo, t])
+  }, [providerKey])
 
   return {
     isRedirecting: provider !== null && !failed,

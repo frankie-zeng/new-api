@@ -24,10 +24,15 @@ import { api, type RefreshOutcome } from '@/lib/api'
 import type { AuthBundle } from '@/stores/auth-store'
 
 import { executeLogout } from './api'
+import { useAutoOAuthRedirect } from './hooks/use-auto-oauth-redirect'
 import { useOAuthLogin } from './hooks/use-oauth-login'
 import { consumeOAuthLoginRedirect } from './lib/oauth-callback-mode'
+import type { CustomOAuthProviderInfo } from './types'
 
-afterEach(() => vi.restoreAllMocks())
+afterEach(() => {
+  document.cookie = 'new_api_has_session=; max-age=0'
+  vi.restoreAllMocks()
+})
 
 test.each([true, false])(
   'starts Telegram OAuth only when configuration is ready: %s',
@@ -60,10 +65,7 @@ test.each([true, false])(
     )
     await act(() => result.current.handleTelegramLogin())
     if (configured) {
-      expect(post.mock.calls.map(([url]) => url)).toEqual([
-        '/api/oauth/state',
-        '/api/user/auth/logout',
-      ])
+      expect(post.mock.calls.map(([url]) => url)).toEqual(['/api/oauth/state'])
       expect(post).toHaveBeenCalledWith(
         '/api/oauth/state',
         expect.objectContaining({ provider: 'telegram', intent: 'login' }),
@@ -85,6 +87,92 @@ test.each([true, false])(
     }
   }
 )
+
+const autoCProvider: CustomOAuthProviderInfo = {
+  id: 1,
+  name: 'AutoC',
+  slug: 'autoc',
+  icon: '',
+  client_id: 'client',
+  authorization_endpoint: 'https://id.example.com/authorize',
+  scopes: 'openid',
+}
+
+test('anonymous OAuth login does not call logout', async () => {
+  vi.spyOn(window, 'localStorage', 'get').mockReturnValue(window.sessionStorage)
+  const post = vi.spyOn(api, 'post').mockImplementation(async (url) => {
+    if (url === '/api/oauth/state') {
+      return { data: { success: true, data: { flow_token: 'autoc-state' } } }
+    }
+    throw new Error(`Unexpected POST ${url}`)
+  })
+  const open = vi.spyOn(window, 'open').mockReturnValue(null)
+  const { result } = renderHook(() => useOAuthLogin(null))
+
+  await act(() => result.current.handleCustomOAuthLogin(autoCProvider))
+
+  expect(post.mock.calls.map(([url]) => url)).toEqual(['/api/oauth/state'])
+  expect(open).toHaveBeenCalledWith(
+    expect.stringContaining('https://id.example.com/authorize?'),
+    '_self'
+  )
+})
+
+test('OAuth login still starts when logout is rejected', async () => {
+  document.cookie = 'new_api_has_session=1'
+  vi.spyOn(window, 'localStorage', 'get').mockReturnValue(window.sessionStorage)
+  const post = vi.spyOn(api, 'post').mockImplementation(async (url) => {
+    if (url === '/api/user/auth/logout') {
+      throw new Error('request origin is not allowed')
+    }
+    if (url === '/api/oauth/state') {
+      return { data: { success: true, data: { flow_token: 'autoc-state' } } }
+    }
+    throw new Error(`Unexpected POST ${url}`)
+  })
+  const open = vi.spyOn(window, 'open').mockReturnValue(null)
+  const error = vi.spyOn(toast, 'error')
+  const { result } = renderHook(() => useOAuthLogin(null))
+
+  await act(() => result.current.handleCustomOAuthLogin(autoCProvider))
+
+  expect(post.mock.calls.map(([url]) => url)).toEqual([
+    '/api/user/auth/logout',
+    '/api/oauth/state',
+  ])
+  expect(open).toHaveBeenCalledWith(
+    expect.stringContaining('https://id.example.com/authorize?'),
+    '_self'
+  )
+  expect(error).not.toHaveBeenCalled()
+})
+
+test('auto OAuth redirect does not call logout for an anonymous visitor', async () => {
+  vi.spyOn(window, 'localStorage', 'get').mockReturnValue(window.sessionStorage)
+  const post = vi.spyOn(api, 'post').mockImplementation(async (url) => {
+    if (url === '/api/oauth/state') {
+      return { data: { success: true, data: { flow_token: 'autoc-state' } } }
+    }
+    throw new Error(`Unexpected POST ${url}`)
+  })
+  const open = vi.spyOn(window, 'open').mockReturnValue(null)
+  const error = vi.spyOn(toast, 'error')
+
+  renderHook(() =>
+    useAutoOAuthRedirect({
+      custom_oauth_providers: [autoCProvider],
+    })
+  )
+
+  await vi.waitFor(() => {
+    expect(open).toHaveBeenCalledWith(
+      expect.stringContaining('https://id.example.com/authorize?'),
+      '_self'
+    )
+  })
+  expect(post.mock.calls.map(([url]) => url)).toEqual(['/api/oauth/state'])
+  expect(error).not.toHaveBeenCalled()
+})
 
 const bundle: AuthBundle = {
   access_token: 'access-token',

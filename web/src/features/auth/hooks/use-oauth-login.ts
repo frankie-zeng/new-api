@@ -20,12 +20,14 @@ import { useState, useRef, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
-import { clearAuthentication } from '@/lib/api'
 import { handleServerError } from '@/lib/handle-server-error'
 import { AuthOperationError } from '@/lib/secure-verification'
-import { createServerError } from '@/lib/server-error-message'
 
-import { createOAuthAuthorization, createOAuthFlow, logout } from '../api'
+import {
+  createOAuthAuthorization,
+  createOAuthFlow,
+  logoutBestEffort,
+} from '../api'
 import {
   buildGitHubOAuthUrl,
   buildDiscordOAuthUrl,
@@ -59,11 +61,7 @@ export function useOAuthLogin(
   }, [t])
 
   const resetSession = async () => {
-    const response = await logout()
-    if (!response.success) {
-      throw createServerError(response, t('Failed to sign out session'))
-    }
-    clearAuthentication()
+    await logoutBestEffort()
   }
 
   const handleGitHubLogin = async () => {
