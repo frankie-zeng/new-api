@@ -18,9 +18,15 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import axios from 'axios'
 
-import { api, refreshAuthentication, type RefreshOutcome } from '@/lib/api'
+import {
+  api,
+  clearAuthentication,
+  refreshAuthentication,
+  type RefreshOutcome,
+} from '@/lib/api'
 import { AuthOperationError } from '@/lib/secure-verification'
 import { getServerErrorMessageKey } from '@/lib/server-error-message'
+import { hasSessionHint } from '@/lib/session-hint'
 import { useAuthStore } from '@/stores/auth-store'
 
 import {
@@ -139,6 +145,21 @@ export async function logout(): Promise<ApiResponse> {
     },
     refresh: refreshAuthentication,
   })
+}
+
+// End a real browser session before a new login. Anonymous visitors have
+// nothing to revoke, and logout shares the critical auth rate limit with
+// refresh and OAuth state, so a needless call can block the redirect.
+export async function logoutBestEffort(): Promise<void> {
+  const auth = useAuthStore.getState().auth
+  if (auth.user || auth.accessToken || auth.session || hasSessionHint()) {
+    try {
+      await logout()
+    } catch {
+      // A rejected logout must not block a new login.
+    }
+  }
+  clearAuthentication()
 }
 
 // ----------------------------------------------------------------------------
