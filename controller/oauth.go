@@ -485,6 +485,15 @@ func findOrCreateOAuthUser(c *gin.Context, provider oauth.Provider, oauthUser *o
 		}
 	}
 
+	// The same username is the same account, including when registration is off.
+	// A provider subject that is not stored yet is attached when the account
+	// has no binding for this provider.
+	if linked, err := linkExistingUserByOAuthUsername(provider, oauthUser); err != nil {
+		return nil, nil, err
+	} else if linked != nil {
+		return linked, nil, nil
+	}
+
 	// User doesn't exist, create new user if registration is enabled
 	if !common.RegisterEnabled {
 		return nil, nil, &OAuthRegistrationDisabledError{}
@@ -586,6 +595,71 @@ func findOrCreateOAuthUser(c *gin.Context, provider oauth.Provider, oauthUser *o
 	}
 
 	return user, nil, nil
+}
+
+// linkExistingUserByOAuthUsername returns the account that already uses the
+// provider username. Soft-deleted rows are ignored, so a removed username can
+// still be registered again.
+func linkExistingUserByOAuthUsername(provider oauth.Provider, oauthUser *oauth.OAuthUser) (*model.User, error) {
+	username := strings.TrimSpace(oauthUser.Username)
+	if username == "" || oauthUser.ProviderUserID == "" || len(username) > model.UserNameMaxLength {
+		return nil, nil
+	}
+	var existing model.User
+	err := model.DB.Where("username = ?", username).First(&existing).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if err := attachOAuthIdentity(&existing, provider, oauthUser.ProviderUserID); err != nil {
+		return nil, err
+	}
+	return &existing, nil
+}
+
+func attachOAuthIdentity(user *model.User, provider oauth.Provider, providerUserID string) error {
+	if genericProvider, ok := provider.(*oauth.GenericOAuthProvider); ok {
+		_, err := model.GetUserOAuthBinding(user.Id, genericProvider.GetProviderId())
+		if err == nil {
+			return nil
+		}
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
+		return model.CreateUserOAuthBinding(&model.UserOAuthBinding{
+			UserId:         user.Id,
+			ProviderId:     genericProvider.GetProviderId(),
+			ProviderUserId: providerUserID,
+		})
+	}
+
+	column := provider.ProviderUserIDColumn()
+	if column == "" || boundProviderUserID(user, column) != "" {
+		return nil
+	}
+	provider.SetProviderUserID(user, providerUserID)
+	return model.DB.Model(user).Update(column, providerUserID).Error
+}
+
+func boundProviderUserID(user *model.User, column string) string {
+	switch column {
+	case "github_id":
+		return user.GitHubId
+	case "discord_id":
+		return user.DiscordId
+	case "oidc_id":
+		return user.OidcId
+	case "linux_do_id":
+		return user.LinuxDOId
+	case "wechat_id":
+		return user.WeChatId
+	case "telegram_id":
+		return user.TelegramId
+	default:
+		return ""
+	}
 }
 
 // recordLegacyGitHubBindingAudit records the outcome of a legacy GitHub binding

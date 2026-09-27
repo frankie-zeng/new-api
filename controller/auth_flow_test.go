@@ -1123,3 +1123,35 @@ func TestOAuthBindIgnoresLegacyGitHubUsernames(t *testing.T) {
 		})
 	}
 }
+
+func TestOAuthLoginTreatsMatchingUsernameAsTheSameUser(t *testing.T) {
+	setupSecurityEnrollmentTest(t)
+	previousRegister := common.RegisterEnabled
+	common.RegisterEnabled = false
+	t.Cleanup(func() { common.RegisterEnabled = previousRegister })
+
+	existing := &model.User{Username: "alice", Role: common.RoleCommonUser, Status: common.UserStatusEnabled, Group: "default", AffCode: "alice-aff", AuthVersion: 1}
+	require.NoError(t, model.DB.Create(existing).Error)
+
+	response := legacyGitHubOAuthLogin(t, &legacyGitHubOAuthProvider{providerUserID: "oauth-alice", legacyID: "alice"})
+	var result struct {
+		Success bool `json:"success"`
+		Data    struct {
+			User struct {
+				Id       int    `json:"id"`
+				Username string `json:"username"`
+			} `json:"user"`
+		} `json:"data"`
+	}
+	require.NoError(t, common.Unmarshal(response.Body.Bytes(), &result))
+	require.True(t, result.Success, response.Body.String())
+	assert.Equal(t, existing.Id, result.Data.User.Id)
+	assert.Equal(t, "alice", result.Data.User.Username)
+
+	var stored model.User
+	require.NoError(t, model.DB.First(&stored, existing.Id).Error)
+	assert.Equal(t, "oauth-alice", stored.GitHubId)
+	var count int64
+	require.NoError(t, model.DB.Model(&model.User{}).Where("username = ?", "alice").Count(&count).Error)
+	assert.Equal(t, int64(1), count)
+}
