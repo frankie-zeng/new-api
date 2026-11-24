@@ -111,6 +111,7 @@ func cleanGeminiFunctionParametersWithDepth(params interface{}, depth int) inter
 			cleanedMap["anyOf"] = cleanedNested
 		}
 
+		ensureGeminiSchemaType(cleanedMap)
 		return cleanedMap
 	case []interface{}:
 		cleanedArray := make([]interface{}, len(v))
@@ -134,6 +135,7 @@ func cleanGeminiFunctionParametersShallow(params interface{}) interface{} {
 		}
 		normalizeGeminiSchemaTypeAndNullable(cleanedMap)
 		sanitizeGeminiEnum(cleanedMap)
+		ensureGeminiSchemaType(cleanedMap)
 		delete(cleanedMap, "properties")
 		delete(cleanedMap, "items")
 		delete(cleanedMap, "anyOf")
@@ -228,6 +230,24 @@ func normalizeGeminiSchemaTypeAndNullable(schema map[string]interface{}) {
 		} else {
 			delete(schema, "type")
 		}
+	}
+}
+
+// ensureGeminiSchemaType supplies the type Gemini's Schema proto requires.
+// JSON Schema allows a node to omit it, and a null-only type is removed
+// above, which Vertex rejects as "didn't specify the schema type field".
+// properties and items decide object and array; anything else is a string.
+func ensureGeminiSchemaType(schema map[string]any) {
+	if typeName, ok := schema["type"].(string); ok && strings.TrimSpace(typeName) != "" {
+		return
+	}
+	switch {
+	case schema["properties"] != nil:
+		schema["type"] = "OBJECT"
+	case schema["items"] != nil:
+		schema["type"] = "ARRAY"
+	default:
+		schema["type"] = "STRING"
 	}
 }
 
