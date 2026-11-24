@@ -94,6 +94,19 @@ func removeFunctionCallIDs(request *dto.GeminiChatRequest) {
 }
 
 func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, info *relaycommon.RelayInfo, request *dto.ClaudeRequest) (any, error) {
+	if a.RequestMode == RequestModeGemini {
+		geminiAdaptor := gemini.Adaptor{}
+		converted, err := geminiAdaptor.ConvertClaudeRequest(c, info, request)
+		if err != nil {
+			return nil, err
+		}
+		if geminiRequest, ok := converted.(*dto.GeminiChatRequest); ok &&
+			model_setting.GetGeminiSettings().RemoveFunctionResponseIdEnabled {
+			removeFunctionCallIDs(geminiRequest)
+		}
+		return converted, nil
+	}
+
 	claudeAdaptor := claude.Adaptor{}
 	if _, err := claudeAdaptor.ConvertClaudeRequest(c, info, request); err != nil {
 		return nil, err
