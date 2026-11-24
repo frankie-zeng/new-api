@@ -104,14 +104,37 @@ func cleanGeminiFunctionParametersWithDepth(params interface{}, depth int) inter
 		}
 
 		if nested, ok := cleanedMap["anyOf"].([]interface{}); ok && nested != nil {
-			cleanedNested := make([]interface{}, len(nested))
-			for i, item := range nested {
-				cleanedNested[i] = cleanGeminiFunctionParametersWithDepth(item, depth+1)
+			cleanedNested := make([]interface{}, 0, len(nested))
+			hasNullVariant := false
+			for _, item := range nested {
+				cleanedItem := cleanGeminiFunctionParametersWithDepth(item, depth+1)
+				if isNullOnlyGeminiSchema(cleanedItem) {
+					hasNullVariant = true
+					continue
+				}
+				cleanedNested = append(cleanedNested, cleanedItem)
 			}
-			cleanedMap["anyOf"] = cleanedNested
+			if hasNullVariant {
+				cleanedMap["nullable"] = true
+			}
+			if hasNullVariant && len(cleanedNested) == 1 {
+				if single, ok := cleanedNested[0].(map[string]interface{}); ok {
+					delete(cleanedMap, "anyOf")
+					for key, item := range single {
+						if _, exists := cleanedMap[key]; !exists {
+							cleanedMap[key] = item
+						}
+					}
+				} else {
+					cleanedMap["anyOf"] = cleanedNested
+				}
+			} else if len(cleanedNested) > 0 {
+				cleanedMap["anyOf"] = cleanedNested
+			} else {
+				delete(cleanedMap, "anyOf")
+			}
 		}
 
-		ensureGeminiSchemaType(cleanedMap)
 		return cleanedMap
 	case []interface{}:
 		cleanedArray := make([]interface{}, len(v))
@@ -135,7 +158,6 @@ func cleanGeminiFunctionParametersShallow(params interface{}) interface{} {
 		}
 		normalizeGeminiSchemaTypeAndNullable(cleanedMap)
 		sanitizeGeminiEnum(cleanedMap)
-		ensureGeminiSchemaType(cleanedMap)
 		delete(cleanedMap, "properties")
 		delete(cleanedMap, "items")
 		delete(cleanedMap, "anyOf")
@@ -233,22 +255,18 @@ func normalizeGeminiSchemaTypeAndNullable(schema map[string]interface{}) {
 	}
 }
 
-// ensureGeminiSchemaType supplies the type Gemini's Schema proto requires.
-// JSON Schema allows a node to omit it, and a null-only type is removed
-// above, which Vertex rejects as "didn't specify the schema type field".
-// properties and items decide object and array; anything else is a string.
-func ensureGeminiSchemaType(schema map[string]any) {
-	if typeName, ok := schema["type"].(string); ok && strings.TrimSpace(typeName) != "" {
-		return
+func isNullOnlyGeminiSchema(schema any) bool {
+	fields, ok := schema.(map[string]any)
+	if !ok {
+		return false
 	}
-	switch {
-	case schema["properties"] != nil:
-		schema["type"] = "OBJECT"
-	case schema["items"] != nil:
-		schema["type"] = "ARRAY"
-	default:
-		schema["type"] = "STRING"
+	nullable, _ := fields["nullable"].(bool)
+	if !nullable {
+		return false
 	}
+	_, hasType := fields["type"]
+	_, hasAnyOf := fields["anyOf"]
+	return !hasType && !hasAnyOf
 }
 
 // FunctionParameters returns the Gemini function declaration field that
@@ -349,6 +367,17 @@ func collectSchemaMisfits(schema any, depth int, found map[string]struct{}) {
 		}
 		return
 	}
+	// Vertex rejects a typed Schema node that omits type, and rejects anyOf
+	// combined with any other field. Both are legal JSON Schema, so they take
+	// parametersJsonSchema on Vertex and Gemini v1beta.
+	if _, hasType := value["type"]; !hasType {
+		if _, hasAnyOf := value["anyOf"]; !hasAnyOf {
+			found["missing type"] = struct{}{}
+		}
+	}
+	if _, hasAnyOf := value["anyOf"]; hasAnyOf && len(value) > 1 {
+		found["anyOf"] = struct{}{}
+	}
 	for key, item := range value {
 		if _, allowed := geminiOpenAPISchemaAllowedFields[key]; !allowed {
 			if key != "additionalProperties" && key != "$schema" {
@@ -360,6 +389,8 @@ func collectSchemaMisfits(schema any, depth int, found map[string]struct{}) {
 		case "type":
 			if _, isArray := item.([]any); isArray {
 				found["type arrays"] = struct{}{}
+			} else if typeStr, isString := item.(string); isString && strings.EqualFold(strings.TrimSpace(typeStr), "null") {
+				found["null type"] = struct{}{}
 			}
 		case "enum":
 			values, _ := item.([]any)
