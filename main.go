@@ -413,7 +413,7 @@ func InitResources() error {
 	service.StartAuthArtifactCleanup()
 
 	if common.DisposableEmailBlocklistReady() {
-		common.SysLog(fmt.Sprintf("disposable email blocklist loaded: %d domains", common.DisposableEmailBlocklistCount()))
+		common.SysLog(common.LogText("disposable email blocklist loaded: %d domains", common.DisposableEmailBlocklistCount()))
 	} else {
 		common.SysError("disposable email blocklist failed to load; outbound SMTP is disabled")
 	}
